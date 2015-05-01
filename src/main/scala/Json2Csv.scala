@@ -3,7 +3,6 @@ import java.io.{BufferedWriter, File, FileWriter}
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
-import scala.collection.immutable.Map
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -35,46 +34,38 @@ a local data file that is in the same format as the sample.
 object Json2Csv {
   var header = ArrayBuffer[String]()
   var reduced_item = scala.collection.mutable.HashMap[String, Any]()
+
+  /**
+   * build map of col name -> col value and grow col header name
+   * @param key header builder
+   * @param value node element
+   */
   def reduce_item(key: String, value: Any) : Unit = {
     value match {
-      case List(x, xs @ _ *) => {
-        reduce_item(s"${key}_0", x)
-        var i = 1
-        for (item <- xs) {
-          reduce_item(s"${key}_$i", item)
-          i = i + 1
+      case List(xs @ _ *) =>
+        xs.zipWithIndex.foreach {
+          case (item, index) => reduce_item(s"${key}_$index", item)
         }
-      }
 
-      case m: scala.collection.immutable.HashMap[_, _] => {
+      case m: scala.collection.immutable.HashMap[_, _] =>
         for ((k:String, v) <- m) {
           val newKey = if (key != "") s"${key}_$k" else s"$k"
-          v match {
-            case s: String => { reduced_item += (newKey -> s); header += newKey }
-            case i: BigInt => { reduced_item += (newKey -> i); header += newKey }
-            case d: Double => { reduced_item += (newKey -> d); header += newKey }
-            case List(head, tail) => reduce_item(newKey, v)
-            case mi: Map[_,_] => reduce_item(newKey, mi)
-          }
+          reduce_item(newKey, v)
         }
-      }
 
-      case m: scala.collection.immutable.Map[_, _] => {
+      case m: scala.collection.immutable.Map[_, _] =>
         for ((k:String, v:Any) <- m) {
           val newKey = if (key != "") s"${key}_$k" else s"$k"
-          v match {
-            case s: String => {reduced_item += (newKey -> s); header += newKey }
-            case i: BigInt => { reduced_item += (newKey -> i); header += newKey }
-            case d: Double => { reduced_item += (newKey -> d); header += newKey }
-            case List(head, tail @ _ *) => reduce_item(newKey, v)
-            case mi: Map[_,_] => reduce_item(newKey, mi)
-          }
+          reduce_item(newKey, v)
         }
-      }
 
-      case _ => {
-        println(s"found $value")
-      }
+      case s : String => reduced_item += (key -> s); header += key
+
+      case i : BigInt => reduced_item += (key -> i); header += key
+
+      case d : Double => reduced_item += (key -> d); header += key
+
+      case _ => println(s"found $value")
     }
   }
 
@@ -112,7 +103,7 @@ object Json2Csv {
           typeCounts += reduced_item(hdr_type).asInstanceOf[String] -> 1
         }
         val wt_keys = reduced_item.keySet.filter(_.endsWith(hdr_weight))
-        if (wt_keys.size != 0)
+        if (wt_keys.nonEmpty)
           totWt = reduced_item.filterKeys{ wt_keys.contains(_) == true }.map(_._2.asInstanceOf[Double]).sum
       }
 
@@ -125,16 +116,15 @@ object Json2Csv {
 
     bw.close()
 
-    if (tracking) {
+    if (tracking)
       println(
         s"""
           |Data Types:
           |  call: ${typeCounts("call")}
           |  delivery: ${typeCounts("delivery")}
           |  sending: ${typeCounts("sending")}
-          |Total Weight: ${totWt}
+          |Total Weight: $totWt
         """.stripMargin)
-    }
   }
 
 }
