@@ -26,7 +26,7 @@ Run your implementation on the data sample given but it must work on any valid J
  */
 object Json2Csv {
   var header = ArrayBuffer[String]()
-  var reduced_item = scala.collection.mutable.LinkedHashMap[String, Any]()
+  var reduced_item = scala.collection.mutable.HashMap[String, Any]()
   def reduce_item(key: String, value: Any) : Unit = {
     value match {
       case List(x, xs @ _ *) => {
@@ -70,8 +70,12 @@ object Json2Csv {
     }
   }
 
+  val hdr_type = "header_type"
+  val hdr_weight = "weight"
+
   def main(args: Array[String]) = {
-    if (args.length != 2) {
+    val tracking = if (args.length == 3) true else false
+    if (args.length != 2 && !tracking) {
       sys.error("\nUsage: scala json2csv.scala <json_in_file_path> <csv_out_file_path>\n")
       sys.exit()
     }
@@ -82,13 +86,27 @@ object Json2Csv {
     val bw = new BufferedWriter(new FileWriter(csvFile))
     //parsing
     val rootNode = ""
+    var typeCounts = scala.collection.mutable.HashMap[String, BigInt]()
+    var totWt:Double = 0.0
     for (child <- jsonObj.children) {
       reduce_item(rootNode, child.values)
 
       val hdr = s"${header.mkString(",")}"
-      val vals = s"${header.map(x => reduced_item.get(x).get).mkString(",")}"
+      val vals = s"${header.map(x => reduced_item(x)).mkString(",")}"
       println(hdr)
       println(vals)
+
+      if (tracking) {   // reporting section
+        if (typeCounts.contains(reduced_item(hdr_type).asInstanceOf[String])) {
+          typeCounts(reduced_item(hdr_type).asInstanceOf[String]) =
+            typeCounts(reduced_item(hdr_type).asInstanceOf[String]) + 1
+        } else {
+          typeCounts += reduced_item(hdr_type).asInstanceOf[String] -> 1
+        }
+        val wt_keys = reduced_item.keySet.filter(_.endsWith(hdr_weight))
+        if (wt_keys.size != 0)
+          totWt = reduced_item.filterKeys{ wt_keys.contains(_) == true }.map(_._2.asInstanceOf[Double]).sum
+      }
 
       bw.write(s"$hdr\n")
       bw.write(s"$vals\n")
@@ -98,6 +116,17 @@ object Json2Csv {
     }
 
     bw.close()
+
+    if (tracking) {
+      println(
+        s"""
+          |Data Types:
+          |  call: ${typeCounts("call")}
+          |  delivery: ${typeCounts("delivery")}
+          |  sending: ${typeCounts("sending")}
+          |Total Weight: ${totWt}
+        """.stripMargin)
+    }
   }
 
 }
