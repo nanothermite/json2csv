@@ -23,6 +23,14 @@ The JSON data is not a uniform type. The converted CSV must:
 The naming convention of the columns is not important but must be
 mappable to the original JSON.
 Run your implementation on the data sample given but it must work on any valid JSON.
+
+ Task #2
+
+Create a program that would be given to users to extract the following from
+a local data file that is in the same format as the sample.
+
+1) Total Distinct Types of activity and counts.
+2) Total Weight of all sending packages.
  */
 object Json2Csv {
   var header = ArrayBuffer[String]()
