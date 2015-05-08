@@ -4,6 +4,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Stack
 
 /**
  * Created by hkatz on 4/30/15.
@@ -33,6 +34,7 @@ a local data file that is in the same format as the sample.
  */
 object Json2Csv {
   var header = ArrayBuffer[String]()
+  var hdr_map = scala.collection.mutable.HashMap[String, Int]()
   var reduced_item = scala.collection.mutable.HashMap[String, Any]()
 
   /**
@@ -47,25 +49,19 @@ object Json2Csv {
           case (item, index) => reduce_item(s"${key}_$index", item)
         }
 
-      case m: scala.collection.immutable.HashMap[_, _] =>
+      case m: scala.collection.immutable.Map[_, _] =>
         for ((k:String, v) <- m) {
           val newKey = if (key != "") s"${key}_$k" else s"$k"
           reduce_item(newKey, v)
         }
 
-      case m: scala.collection.immutable.Map[_, _] =>
-        for ((k:String, v:Any) <- m) {
-          val newKey = if (key != "") s"${key}_$k" else s"$k"
-          reduce_item(newKey, v)
-        }
-
-      case s : String => reduced_item += (key -> s); header += key
-
-      case i : BigInt => reduced_item += (key -> i); header += key
-
-      case d : Double => reduced_item += (key -> d); header += key
-
-      case _ => println(s"found $value")
+      case _  => if (!hdr_map.contains(key)) {
+        hdr_map += (key -> 1)
+      } else {
+        hdr_map += (key -> (hdr_map(key) + 1))
+      }
+      val newkey = s"${key}_${hdr_map(key)}"
+      reduced_item += (newkey -> value); header += newkey
     }
   }
 
@@ -90,29 +86,29 @@ object Json2Csv {
     for (child <- jsonObj.children) {
       reduce_item(rootNode, child.values)
 
-      val hdr = s"${header.mkString(",")}"
-      val vals = s"${header.map(x => reduced_item(x)).mkString(",")}"
-      println(hdr)
-      println(vals)
-
       if (tracking) {   // reporting section
-        if (typeCounts.contains(reduced_item(hdr_type).asInstanceOf[String])) {
-          typeCounts(reduced_item(hdr_type).asInstanceOf[String]) =
-            typeCounts(reduced_item(hdr_type).asInstanceOf[String]) + 1
+        val hdr_str:String = reduced_item(hdr_type).asInstanceOf[String]
+        if (typeCounts.contains(hdr_str)) {
+          typeCounts(hdr_str) = typeCounts(hdr_str) + 1
         } else {
-          typeCounts += reduced_item(hdr_type).asInstanceOf[String] -> 1
+          typeCounts += hdr_str -> 1
         }
         val wt_keys = reduced_item.keySet.filter(_.endsWith(hdr_weight))
         if (wt_keys.nonEmpty)
           totWt = reduced_item.filterKeys{ wt_keys.contains(_) == true }.map(_._2.asInstanceOf[Double]).sum
       }
-
-      bw.write(s"$hdr\n")
-      bw.write(s"$vals\n")
-
-      header.clear()
-      reduced_item.clear()
     }
+    val hdr = s"${header.mkString(",")}"
+    val vals = s"${header.map(x => reduced_item(x)).mkString(",")}"
+
+    println(hdr)
+    println(vals)
+
+    bw.write(s"$hdr\n")
+    bw.write(s"$vals\n")
+
+      //header.clear()
+      //reduced_item.clear()
 
     bw.close()
 
